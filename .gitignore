@@ -1,0 +1,15 @@
+# local-only assistant guidance (not for the public repo)
+AGENTS.md
+
+# Python / Colab
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+
+# cached features, checkpoints, and raw data (regenerated; live on Drive, not in git)
+*.pt
+*.npy
+*.avi
+data/
+UCF101_subset/
+features/
