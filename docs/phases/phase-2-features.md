@@ -47,16 +47,64 @@ See `DECISIONS.md`.
 
 ## What we measured
 
-<!-- filled after running -->
-- Cached shapes: train _TBD_ (expect ~(270, 16, 512)), val _TBD_ (~(90, ...)),
-  test _TBD_ (~(97, ...)).
-- Any clips skipped as unreadable: _TBD_.
-- Rough extraction time: _TBD_.
+- **Cached shapes:** train (270, 16, 512), val (90, 16, 512), test (97, 16, 512) —
+  one 512-d feature per frame, 16 frames per clip, saved to
+  `MyDrive/framesight/features/{train,val,test}.pt`.
+- **Clips skipped:** 0 — all 457 clips decoded and extracted cleanly.
+- **Timing:** a few minutes on the T4, dominated by video decoding. Runs once; re-runs
+  print "already cached" and skip.
 
 ## What broke
 
-<!-- filled after running: unreadable clips, codec issues, memory, timing -->
+Nothing in Phase 2 itself. Every `.avi` was readable by OpenCV, and the frozen-ResNet
+pass produced the expected shapes on the first run. (The data-source trouble all
+happened in Phase 1.)
 
 ## Interview questions
 
-<!-- filled when the phase closes -->
+**Q1. Why freeze the ResNet and extract features once, instead of fine-tuning it
+end-to-end with the temporal model?**
+
+Three reasons, and they compound. First, data: with 270 training clips, fine-tuning an
+11-million-parameter CNN would overfit almost immediately — there is nowhere near
+enough signal to re-learn good visual features, so a frozen ImageNet backbone that
+already has them is the safer choice. Second, cost: decoding video and running the CNN
+is the expensive part of the pipeline, and freezing lets us do it exactly once and
+cache the result, after which every experiment trains in seconds on small tensors;
+end-to-end training would re-run the CNN on every frame every epoch. Third,
+separation of concerns: freezing cleanly splits "what each frame looks like" (the CNN's
+job, solved by transfer) from "how the frames evolve over time" (the sequence model's
+job, which is what we actually want to study). The cost is a ceiling on accuracy —
+features tuned for ImageNet object classification are not perfectly matched to these
+actions — but on this little data that ceiling is far above what fine-tuning could
+reach without overfitting.
+
+**Q2. ResNet18 was trained on ImageNet, which is single-image object classification.
+Why are its features useful for *video action* recognition, and what do they
+fundamentally not capture?**
+
+They are useful because most of what distinguishes these actions is still *appearance*:
+a bench and a barbell, a swimming pool, a pull-up bar, a person inverted versus
+upright. ImageNet features encode exactly that kind of object-and-scene information, and
+it transfers directly — a frame of BenchPress and a frame of Diving look very
+different, and the CNN already knows how to describe that difference. What a per-frame
+CNN fundamentally cannot capture is **motion**: the features describe each frame in
+isolation, with no notion of how one frame follows another, so direction, speed, and
+temporal order are invisible to them. That missing information — the dynamics — is
+precisely what the BiLSTM in Phase 3 is there to recover from the *sequence* of
+features. The division is clean: the CNN sees the stills, the sequence model sees the
+motion.
+
+**Q3. Each clip was reduced to 16 evenly-spaced frames regardless of its length. What
+is the risk of fixed-count uniform sampling, and when would it hurt?**
+
+Uniform sampling assumes the action is spread roughly evenly across the clip, so 16
+samples are a fair summary. The risk is temporal aliasing: a brief but decisive moment
+(the instant a diver leaves the board, the top of a single jumping-jack) can fall
+between two sampled frames and be missed entirely, and a fast, high-frequency action
+sampled at only 16 points can look ambiguous. It hurts most for long clips (16 frames
+cover a smaller fraction of the motion) and for actions defined by a short key event
+rather than a sustained pattern. For this subset the actions are mostly periodic and
+sustained (strokes, reps), so uniform 16-frame sampling is a reasonable fit — but it is
+a modelling assumption worth stating, and denser or event-aware sampling would be the
+first thing to try if a particular class underperformed.
