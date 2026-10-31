@@ -5,9 +5,11 @@ pretrained CNN with a recurrent temporal model and an attention layer. The name 
 idea: FrameSight learns *where to look across the frames* of a clip. The capstone of a
 four-group deep-learning curriculum — it uses every piece those groups built.
 
-> Status: in progress. The pipeline is designed and verified; results are filled in as
-> each phase completes. See `docs/PROJECT_PROPOSAL.md` for the full plan and
-> `docs/DECISIONS.md` for the reasoning behind every choice.
+> Status: complete. Built in six phases (data -> features -> model -> attention ->
+> audit -> write-up), each with its own record in `docs/phases/`. See
+> `docs/PROJECT_PROPOSAL.md` for the plan, `docs/DECISIONS.md` for the reasoning behind
+> every choice, `docs/RESULTS.md` for the full results, and `docs/MODEL_CARD.md` for the
+> deployment summary.
 
 ---
 
@@ -52,11 +54,31 @@ training the temporal model is fast and resumable. Full datasheet: `docs/DATASET
 
 ## 4. Results
 
-> To be completed after Phase 3-5.
+Full detail in `docs/RESULTS.md`; the headlines:
 
-- Pooling comparison (mean vs last-state vs attention): _table to follow_
-- Attention saliency over frames: _figure to follow_
-- Responsible-AI audit (per-class accuracy, calibration): _to follow_
+**Pooling comparison** (9-way, chance 0.111):
+
+| Pooling | Best val acc | Test acc |
+|---------|--------------|----------|
+| mean | 0.944 | 0.866 |
+| last | 0.922 | 0.814 |
+| attention | 0.956 | 0.845 |
+
+All three are strong and within noise of each other on this small test set (97 clips) —
+the frozen ResNet features do most of the work, and attention's value here is
+interpretability rather than a decisive accuracy gain.
+
+**Responsible-AI audit** (`docs/MODEL_CARD.md`):
+- **Per-class:** overall 0.845; strongest on visually-distinctive actions (BenchPress,
+  CleanAndJerk, PullUps all 1.00), weakest on Lunges (0.50), which is confused with
+  JumpingJack. The swimming actions confuse each other — failures track appearance
+  similarity, exactly as expected from a per-frame CNN.
+- **Calibration:** ECE 0.088; temperature scaling *did not help* here (0.105) — tuned on
+  a tiny validation set, it failed to transfer, which is reported honestly rather than
+  hidden.
+- **Out-of-distribution:** on a held-out action (PushUps), max-softmax separated novel
+  from known with AUROC 0.871 — a useful signal, though not a reliable detector without a
+  confidence threshold.
 
 ## 5. How it fits the curriculum
 
@@ -72,23 +94,27 @@ training the temporal model is fast and resumable. Full datasheet: `docs/DATASET
 ```
 framesight/
   README.md                      <- this file
-  <notebook or src>              <- the pipeline (download, features, model, train)
+  framesight.ipynb               <- the full pipeline (data -> features -> model -> attention -> audit -> demo)
   docs/
     PROJECT_PROPOSAL.md          <- problem, objectives, scope, plan
     DECISIONS.md                 <- every choice + rejected alternatives
     DATASET.md                   <- UCF101 subset datasheet
-    RESULTS.md                   <- results / evaluation report (added after training)
-    MODEL_CARD.md                <- model card (added after the audit)
+    RESULTS.md                   <- full results / evaluation report
+    MODEL_CARD.md                <- model card (intended use, performance, limitations)
+    phases/                      <- one record per phase, with code walkthroughs + interview questions
+      phase-1-data.md ... phase-6-writeup.md
 ```
 
 ## 7. Running it
 
-> Full run instructions added once the notebook is finalised. In short: open the
-> notebook in Google Colab, set a GPU runtime, mount Drive, and run top to bottom —
-> the data streams in, frame features are cached to Drive, and the model trains on
-> them.
+Open `framesight.ipynb` in Google Colab, set a GPU runtime (T4), and run top to bottom.
+The notebook downloads the dataset subset from Hugging Face, extracts 16-frame features
+with a frozen ResNet18 and caches them to Google Drive, trains the BiLSTM + attention
+model, and runs the attention visualisation and the responsible-AI audit. Because
+features are cached, re-runs are fast and survive session timeouts. The final
+`predict_action(video_path)` cell classifies any clip you give it.
 
 ## 8. Tech
 
 PyTorch · Google Colab (T4) · torchvision (ResNet18) · OpenCV (frame decoding) ·
-`remotezip` (streaming the dataset subset).
+`huggingface_hub` (dataset download) · scikit-learn (audit metrics).
