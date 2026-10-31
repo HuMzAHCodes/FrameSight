@@ -43,9 +43,12 @@ video clip
 
 ## 3. Dataset
 
-A 10-class subset of **UCF101** (~500 clips), streamed efficiently so the full 6.5 GB
-archive is never downloaded. Frame features are extracted once and cached, so training
-the temporal model is fast and resumable. Full datasheet: `docs/DATASET.md`.
+A **9-class subset of UCF101** (457 clips: 270 train / 90 val / 97 test), pulled from a
+small pre-made Hugging Face copy so the full 6.5 GB archive is never downloaded. The
+classes are gym and swimming actions — BenchPress, BreastStroke, CleanAndJerk, Diving,
+FrontCrawl, JumpingJack, Lunges, PullUps, PushUps — and several are visually similar,
+which makes the task non-trivial. Frame features are extracted once and cached, so
+training the temporal model is fast and resumable. Full datasheet: `docs/DATASET.md`.
 
 ## 4. Results
 
